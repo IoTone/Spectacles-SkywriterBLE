@@ -1,0 +1,59 @@
+- !<AssetImportMetadata/60c254b1-ac4e-4554-aa86-df140ae9fe09>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 82f620fa-f108-4c92-92e0-5809416c361d
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 82f620fa-f108-4c92-92e0-5809416c361d
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> e54fc94e-4333-4d55-8fa8-fd7148eeae4b
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/e54fc94e-4333-4d55-8fa8-fd7148eeae4b>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: 1ac272c7-ed2a-46ee-89cb-6e4538d3f0a7
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    bleKeyboard: false
+    editorText: false
+    lineHeight: false
+    maxLineWidth: false
+    scrollContentTransform: false
+    scrollView: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - bleKeyboard: !<MappingBased.AssignableType> 00000000-0000-0000-0000-000000000000
+      editorText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      scrollView: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
+      scrollContentTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
+      lineHeight: 1.500000
+      maxLineWidth: !<float> 45.000000
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - // @input AssignableType bleKeyboard
+    - '// @input Component.Text editorText {"hint":"The Text component that displays typed content"}'
+    - '// @input AssignableType_1 scrollView {"hint":"The ScrollView component for scrolling"}'
+    - "// @input Component.ScreenTransform scrollContentTransform {\"hint\":\"ScreenTransform of the scroll content wrapper (ScrollView's child)\"}"
+    - '// @input float lineHeight = 1.5 {"hint":"Line height in local units for scroll calculation"}'
+    - '// @input float maxLineWidth = 45 {"hint":"Max characters per line before wrapping"}'
