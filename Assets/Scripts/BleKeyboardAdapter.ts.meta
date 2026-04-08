@@ -26,6 +26,7 @@
   ExportUid: 00000000-0000-0000-0000-000000000000
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
+    audioToggle: false
     batteryLevelText: false
     bleKeyboard: false
     chatWindowText: false
@@ -55,6 +56,7 @@
       wordCountText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       batteryLevelText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       keypressAudio: !<reference.AudioComponent> 00000000-0000-0000-0000-000000000000
+      audioToggle: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
   ScriptTypes:
     -
       {}
@@ -73,3 +75,4 @@
     - '// @input Component.Text batteryLevelText {"hint":"Displays battery level percentage"}'
     - '// @ui {"widget":"separator"}'
     - '// @input Component.AudioComponent keypressAudio {"hint":"AudioComponent that plays the typewriter keypress sound"}'
+    - '// @input AssignableType_1 audioToggle {"hint":"Optional: Toggle button to enable/disable keypress audio"}'

@@ -51,6 +51,12 @@ export class BleKeyboardAdapter extends BaseScriptComponent {
     @hint("AudioComponent that plays the typewriter keypress sound")
     keypressAudio: AudioComponent
 
+    @input
+    @allowUndefined
+    @hint("Optional: Toggle button to enable/disable keypress audio")
+    audioToggle: any
+
+    private audioEnabled: boolean = true;
     private chatContent: string = "";
     private maxChatLines: number = 20;
     private maxLineLength: number = 40;
@@ -78,6 +84,14 @@ export class BleKeyboardAdapter extends BaseScriptComponent {
         }
         if (this.batteryLevelText) {
             this.batteryLevelText.text = "--";
+        }
+
+        // Listen for audio toggle changes
+        if (this.audioToggle && this.audioToggle.onStateChanged) {
+            this.audioToggle.onStateChanged.add((isOn: boolean) => {
+                this.audioEnabled = isOn;
+                print("Audio " + (isOn ? "enabled" : "disabled"));
+            });
         }
     }
 
@@ -151,7 +165,7 @@ export class BleKeyboardAdapter extends BaseScriptComponent {
     }
 
     private playKeypressSound() {
-        if (this.keypressAudio) {
+        if (this.audioEnabled && this.keypressAudio) {
             this.keypressAudio.stop(false);
             this.keypressAudio.play(1);
         }

@@ -1412,6 +1412,7 @@
       wordCountText: !<reference.Text> 8fc29f14-1599-442d-abc2-90a8cff332a9
       batteryLevelText: !<reference.Text> 9dc2c50b-0b54-43a9-9dce-530a807fdd5a
       keypressAudio: !<reference.AudioComponent> be2fd0c8-afc5-4783-a4ba-0fd5b2bfd722
+      audioToggle: !<MappingBased.AssignableType_1> 28a4f527-3d56-45ee-b5be-555344c161df
   ScriptTypes:
     "":
       {}
@@ -2829,7 +2830,7 @@
   PrefabRemaps:
     []
   Name: ScrollingText
-  Enabled: true
+  Enabled: false
   Layers: 1
   LocalTransform: !<TransformEntity>
     Position: {x: 0.000000, y: 0.000000, z: 0.000000}
@@ -4331,7 +4332,7 @@
   PrefabRemaps:
     []
   Name: Text
-  Enabled: true
+  Enabled: false
   Layers: 1
   LocalTransform: !<TransformEntity>
     Position: {x: 0.000000, y: 0.000000, z: 0.000000}
