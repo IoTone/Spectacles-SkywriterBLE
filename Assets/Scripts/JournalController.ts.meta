@@ -28,7 +28,13 @@
   ScriptInputsHidden:
     autosaveDelay: false
     bleKeyboard: false
+    clearButton: false
     editor: false
+    includeLocation: false
+    locationTimeoutSec: false
+    sessionHeading: false
+    sessionTags: false
+    timezone: false
   ScriptTypesHidden:
     {}
   ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
@@ -41,6 +47,12 @@
     - bleKeyboard: !<MappingBased.AssignableType> 00000000-0000-0000-0000-000000000000
       editor: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
       autosaveDelay: 1.500000
+      sessionHeading: Session
+      sessionTags: skywriterble
+      timezone: ""
+      includeLocation: false
+      locationTimeoutSec: !<float> 3.000000
+      clearButton: !<MappingBased.AssignableType_2> 00000000-0000-0000-0000-000000000000
   ScriptTypes:
     -
       {}
@@ -48,3 +60,9 @@
     - // @input AssignableType bleKeyboard
     - '// @input AssignableType_1 editor {"hint":"ScrollableTextEditor view component"}'
     - '// @input float autosaveDelay = 1.5 {"hint":"Seconds of keyboard idle before autosave"}'
+    - "// @input string sessionHeading = \"Session\" {\"hint\":\"Heading title for new sessions (org-mode '* ' headline). e.g., 'Session', 'Field observation'\"}"
+    - "// @input string sessionTags = \"skywriterble\" {\"hint\":\"Org-mode tags for new session headings, colon-delimited without surrounding colons. e.g., 'skywriterble:note'\"}"
+    - "// @input string timezone {\"hint\":\"Optional timezone string for the heading and :TZ: property. If empty, the device's UTC offset is used (e.g., '+0900'). Set to override (e.g., 'JST', 'America/Los_Angeles').\"}"
+    - '// @input bool includeLocation {"hint":"If on, attempts to read GPS lat/lng on lens open and writes a :LATLNG: property into the session heading. Requires Spectacles location permission + Snapchat pairing."}'
+    - "// @input float locationTimeoutSec = 3 {\"hint\":\"Max seconds to wait for a location result before writing the heading without coords (it'll be filled in later if/when GPS resolves).\"}"
+    - "// @input AssignableType_2 clearButton {\"hint\":\"Optional UIKit button (e.g., SphereButton) that triggers clearBuffer() on tap. Wires to the button's onTriggerUp event. WARNING: clearing the buffer is destructive and has no undo — wire a deliberate / hard-to-tap button.\"}"

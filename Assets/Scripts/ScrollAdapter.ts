@@ -12,11 +12,27 @@
  * createScrollAdapter().
  */
 export interface ScrollAdapter {
-    /** Tell the scroll layer that content has grown to N lines of `lineHeight` units each. */
+    /**
+     * Tell the scroll layer that content has grown to N lines of `lineHeight`
+     * units each. Implementations may apply an only-grow constraint to avoid
+     * scroll-position re-clamping on every keystroke during typing.
+     */
     setContentSize(lineCount: number, lineHeight: number): void
+
+    /**
+     * Force the scroll layer's content size to exactly match the given line
+     * count, including shrinking. Use after a buffer reset (clearBuffer,
+     * openBuffer with a smaller saved value) so subsequent scrollToTop /
+     * scrollToBottom calls land on the actual content rather than a stale
+     * grow-only ceiling.
+     */
+    resetContentSize(lineCount: number, lineHeight: number): void
 
     /** Snap the viewport to the bottom of the content. */
     scrollToBottom(): void
+
+    /** Snap the viewport to the top of the content. */
+    scrollToTop(): void
 
     /** Tag for diagnostics. */
     readonly name: string
@@ -29,7 +45,9 @@ export interface ScrollAdapter {
 export class NoScrollAdapter implements ScrollAdapter {
     public readonly name = "none"
     public setContentSize(_lineCount: number, _lineHeight: number): void {}
+    public resetContentSize(_lineCount: number, _lineHeight: number): void {}
     public scrollToBottom(): void {}
+    public scrollToTop(): void {}
 }
 
 /**
@@ -45,6 +63,16 @@ export class SikScrollAdapter implements ScrollAdapter {
     ) {}
 
     public setContentSize(lineCount: number, lineHeight: number): void {
+        this.applyContentSize(lineCount, lineHeight)
+    }
+
+    public resetContentSize(lineCount: number, lineHeight: number): void {
+        // SIK's anchor-based sizing already shrinks/grows on each call; no
+        // grow-only guard to bypass. Reuse the same path.
+        this.applyContentSize(lineCount, lineHeight)
+    }
+
+    private applyContentSize(lineCount: number, lineHeight: number): void {
         if (!this.contentTransform) return
 
         const totalHeight = Math.max(lineCount + 1, 5) * lineHeight
@@ -82,6 +110,26 @@ export class SikScrollAdapter implements ScrollAdapter {
             }
         }
     }
+
+    public scrollToTop(): void {
+        if (!this.scrollView) return
+
+        if (this.scrollView.snapToEdges) {
+            try {
+                this.scrollView.snapToEdges({top: true, bottom: false, left: false, right: false})
+                return
+            } catch (e) {
+                // fall through
+            }
+        }
+        if (this.scrollView.scrollBy) {
+            try {
+                this.scrollView.scrollBy(new vec2(0, 100))
+            } catch (e) {
+                // give up silently
+            }
+        }
+    }
 }
 
 /**
@@ -102,16 +150,44 @@ export class UikitScrollAdapter implements ScrollAdapter {
     constructor(private readonly scrollWindow: any) {}
 
     public setContentSize(lineCount: number, lineHeight: number): void {
+        // Only-grow path used during typing. ScrollWindow re-clamps
+        // scrollPosition whenever scrollDimensions changes; updating it on
+        // every keystroke causes visible bouncing. Growing only avoids that.
+        this.applyContentSize(lineCount, lineHeight, false)
+    }
+
+    public resetContentSize(lineCount: number, lineHeight: number): void {
+        // Allow-shrink path used on explicit buffer reset (clearBuffer,
+        // openBuffer). Without this, after long content followed by a clear,
+        // scrollDimensions stays huge while actual content is tiny — the
+        // top/bottom snaps then land on empty regions of the stale scroll
+        // area, not on the actual text.
+        this.applyContentSize(lineCount, lineHeight, true)
+    }
+
+    private applyContentSize(lineCount: number, lineHeight: number, allowShrink: boolean): void {
         const w = this.scrollWindow
         if (!w) return
 
-        const totalHeight = Math.max(lineCount + 1, 5) * lineHeight
+        const calculatedHeight = Math.max(lineCount + 1, 5) * lineHeight
 
-        // Preserve the configured x dimension; only update y for content height.
         try {
             const current = w.scrollDimensions
-            if (current && typeof current.x === "number") {
-                w.scrollDimensions = new vec2(current.x, totalHeight)
+            if (!current || typeof current.x !== "number") return
+
+            // Floor at windowSize so scrollDimensions is never tighter than
+            // the visible viewport — that confuses ScrollWindow's positioning.
+            const minHeight = (w.windowSize && typeof w.windowSize.y === "number")
+                ? w.windowSize.y
+                : current.y
+            const targetHeight = Math.max(calculatedHeight, minHeight)
+
+            const shouldUpdate = allowShrink
+                ? Math.abs(targetHeight - current.y) > 0.5
+                : targetHeight > current.y
+
+            if (shouldUpdate) {
+                w.scrollDimensions = new vec2(current.x, targetHeight)
             }
         } catch (e) {
             // ScrollWindow not yet initialized; later renders will retry.
@@ -124,6 +200,17 @@ export class UikitScrollAdapter implements ScrollAdapter {
         try {
             // y = -1 is the bottom edge per ScrollWindow's normalized coords.
             w.scrollPositionNormalized = new vec2(0, -1)
+        } catch (e) {
+            // ScrollWindow not yet initialized; the next setContent will retry.
+        }
+    }
+
+    public scrollToTop(): void {
+        const w = this.scrollWindow
+        if (!w) return
+        try {
+            // y = 1 is the top edge per ScrollWindow's normalized coords.
+            w.scrollPositionNormalized = new vec2(0, 1)
         } catch (e) {
             // ScrollWindow not yet initialized; the next setContent will retry.
         }

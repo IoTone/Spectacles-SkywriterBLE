@@ -3,14 +3,24 @@
 
 import {BleKeyboard, KeypressData} from "./BleKeyboard"
 import Event from "./Event"
-import {JournalEntry, JournalStore} from "./JournalTypes"
+import {JournalStore} from "./JournalTypes"
 import {LocalJournalStore} from "./LocalJournalStore"
 import {ScrollableTextEditor} from "./ScrollableTextEditor"
 
 /**
- * JournalController — Owns the current journal entry, routes keypresses
- * into it, drives autosave, and is the source of truth that the editor
- * view and (future) entry picker UI both read from.
+ * JournalController — v1 single-buffer journal.
+ *
+ * On lens start: loads the persisted buffer, appends a new org-mode session
+ * heading with timestamp + properties drawer, and hands the result to the
+ * editor. User-typed characters are appended to the buffer and autosaved
+ * after a short idle period.
+ *
+ * Public methods:
+ *   - clearBuffer() — wipes the persisted buffer entirely (then inserts a
+ *     fresh session heading so the user has something to write under).
+ *
+ * v2 plans (multi-entry, cloud sync, org-mode export) are documented in
+ * DESIGN.md "Future Plans".
  */
 @component
 export class JournalController extends BaseScriptComponent {
@@ -26,20 +36,43 @@ export class JournalController extends BaseScriptComponent {
     @hint("Seconds of keyboard idle before autosave")
     autosaveDelay: number = 1.5
 
+    @input
+    @hint("Heading title for new sessions (org-mode '* ' headline). e.g., 'Session', 'Field observation'")
+    sessionHeading: string = "Session"
+
+    @input
+    @hint("Org-mode tags for new session headings, colon-delimited without surrounding colons. e.g., 'skywriterble:note'")
+    sessionTags: string = "skywriterble"
+
+    @input
+    @hint("Optional timezone string for the heading and :TZ: property. If empty, the device's UTC offset is used (e.g., '+0900'). Set to override (e.g., 'JST', 'America/Los_Angeles').")
+    timezone: string = ""
+
+    @input
+    @hint("If on, attempts to read GPS lat/lng on lens open and writes a :LATLNG: property into the session heading. Requires Spectacles location permission + Snapchat pairing.")
+    includeLocation: boolean = false
+
+    @input
+    @hint("Max seconds to wait for a location result before writing the heading without coords (it'll be filled in later if/when GPS resolves).")
+    locationTimeoutSec: number = 3.0
+
+    @input
+    @allowUndefined
+    @hint("Optional UIKit button (e.g., SphereButton) that triggers clearBuffer() on tap. Wires to the button's onTriggerUp event. WARNING: clearing the buffer is destructive and has no undo — wire a deliberate / hard-to-tap button.")
+    clearButton: any
+
     private store: JournalStore
-    private currentEntry: JournalEntry | null = null
+    private buffer: string = ""
     private autosaveEvent: DelayedCallbackEvent
     private dirty: boolean = false
+    private locationService: any = null
+    private pendingLocationToken: string | null = null
 
-    private onEntryChangedEvent = new Event<JournalEntry>()
-    private onEntryListChangedEvent = new Event<JournalEntry[]>()
-
-    public onEntryChanged = this.onEntryChangedEvent.publicApi()
-    public onEntryListChanged = this.onEntryListChangedEvent.publicApi()
+    private onBufferChangedEvent = new Event<string>()
+    public onBufferChanged = this.onBufferChangedEvent.publicApi()
 
     onAwake() {
         this.store = new LocalJournalStore()
-
         this.createEvent("OnStartEvent").bind(() => this.init())
         this.createEvent("OnDestroyEvent").bind(() => this.flushNow())
     }
@@ -54,104 +87,210 @@ export class JournalController extends BaseScriptComponent {
             print("JournalController: bleKeyboard not wired; keypresses will be ignored.")
         }
 
-        // Defer the first entry render by one frame so SIK ScrollView
-        // (which also initializes on OnStartEvent) is fully constructed
-        // before we call into editor.setContent → recomputeBoundaries().
+        if (this.clearButton && this.clearButton.onTriggerUp && this.clearButton.onTriggerUp.add) {
+            this.clearButton.onTriggerUp.add(() => {
+                print("JournalController: clearBuffer triggered by button")
+                this.clearBuffer()
+            })
+        }
+
+        // Defer the first render by one frame so SIK/UIKit ScrollWindow
+        // (which initializes on OnStartEvent) is fully constructed before
+        // we call into editor.setContent.
         const initialOpen = this.createEvent("DelayedCallbackEvent")
-        initialOpen.bind(() => {
-            const lastId = this.store.getCurrentId()
-            const resumed = lastId ? this.store.load(lastId) : null
-            if (resumed) {
-                this.openEntry(resumed)
-            } else {
-                this.newEntry()
-            }
-        })
+        initialOpen.bind(() => this.openBuffer())
         initialOpen.reset(0.05)
     }
 
+    private openBuffer(): void {
+        const stored = this.store.load()
+        this.buffer = stored
+        this.appendSessionHeading()
+        // Fresh / first-launch buffer: scroll to top so the heading is
+        // fully visible (cursor lives at the end of it) and show the
+        // typing hint. Otherwise we're resuming an existing journal —
+        // scroll to bottom so the user picks up where they left off, and
+        // skip the hint (they've already typed before).
+        const isFresh = stored.length === 0
+        const scrollTo: "top" | "bottom" = isFresh ? "top" : "bottom"
+        if (this.editor) {
+            this.editor.setHint(isFresh)
+            this.editor.setContent(this.buffer, scrollTo, true)
+        }
+        this.markDirty()
+        this.onBufferChangedEvent.invoke(this.buffer)
+
+        if (this.includeLocation && this.pendingLocationToken) {
+            this.startLocationFetch()
+        }
+    }
+
     private onKeypress(data: KeypressData) {
-        if (!this.currentEntry) return
         const key = data.key
 
-        print("buffer: '" + this.currentEntry.content + "'")
         if (key === "BACKSPACE") {
-            if (this.currentEntry.content.length === 0) return
-            this.currentEntry.content = this.currentEntry.content.slice(0, -1)
+            if (this.buffer.length === 0) return
+            this.buffer = this.buffer.slice(0, -1)
         } else if (key === "ESC") {
             return
         } else if (key.indexOf("[0x") === 0) {
             return
         } else {
-            this.currentEntry.content += key
+            this.buffer += key
         }
 
-        if (this.editor) this.editor.setContent(this.currentEntry.content)
+        if (this.editor) {
+            // Hide the "start typing" hint as soon as the user types anything;
+            // setContent then renders content + cursor without the hint.
+            this.editor.setHint(false)
+            this.editor.setContent(this.buffer)
+        }
         this.markDirty()
     }
 
-    public newEntry(): JournalEntry {
-        this.flushNow()
-
-        const now = Date.now()
-        const entry: JournalEntry = {
-            id: String(now),
-            createdAt: now,
-            updatedAt: now,
-            title: this.formatTimestamp(now),
-            content: "",
-        }
-        this.store.save(entry)
-        this.store.setCurrentId(entry.id)
-        this.openEntry(entry)
-        this.onEntryListChangedEvent.invoke(this.store.list())
-        return entry
-    }
-
-    public deleteCurrent(): void {
-        if (!this.currentEntry) return
-        const id = this.currentEntry.id
+    /**
+     * Wipe the persisted buffer entirely and start fresh with just a new
+     * session heading. Use sparingly — there's no undo.
+     */
+    public clearBuffer(): void {
         this.dirty = false
-        this.store.remove(id)
-
-        const list = this.store.list()
-        if (list.length > 0) {
-            const next = this.store.load(list[0].id)
-            if (next) {
-                this.openEntry(next)
-                this.store.setCurrentId(next.id)
-                this.onEntryListChangedEvent.invoke(this.store.list())
-                return
-            }
+        this.buffer = ""
+        this.store.clear()
+        this.appendSessionHeading()
+        // Buffer now contains only the fresh session heading — scroll to
+        // top so the user sees the heading + cursor instead of landing
+        // at the bottom of a near-empty viewport. resetSize=true so the
+        // scroll layer shrinks back to fit the small new content. Re-show
+        // the typing hint since this is a fresh session.
+        if (this.editor) {
+            this.editor.setHint(true)
+            this.editor.setContent(this.buffer, "top", true)
         }
-        this.newEntry()
+        this.markDirty()
+        this.onBufferChangedEvent.invoke(this.buffer)
     }
 
-    public switchTo(id: string): void {
-        if (this.currentEntry && this.currentEntry.id === id) return
-        this.flushNow()
-        const entry = this.store.load(id)
-        if (!entry) {
-            print("JournalController: entry not found: " + id)
+    public getBuffer(): string {
+        return this.buffer
+    }
+
+    private appendSessionHeading(): void {
+        const heading = this.buildSessionHeading()
+        if (this.buffer.length === 0) {
+            this.buffer = heading
             return
         }
-        this.openEntry(entry)
-        this.store.setCurrentId(id)
+        // Ensure exactly one blank line separates the previous content from
+        // the new heading so the org structure stays clean.
+        if (this.buffer.endsWith("\n\n")) {
+            this.buffer += heading
+        } else if (this.buffer.endsWith("\n")) {
+            this.buffer += "\n" + heading
+        } else {
+            this.buffer += "\n\n" + heading
+        }
     }
 
-    public listEntries(): JournalEntry[] {
-        return this.store.list()
+    private buildSessionHeading(): string {
+        const tz = this.effectiveTimezone()
+        const ts = this.formatOrgTimestamp(Date.now(), tz)
+        const tags = this.sessionTags ? " :" + this.sessionTags + ":" : ""
+        const lines: string[] = []
+        lines.push("* " + this.sessionHeading + tags)
+        lines.push("  " + ts)
+        lines.push("  :PROPERTIES:")
+        lines.push("  :TZ: " + tz)
+        lines.push("  :DEVICE: spectacles")
+        if (this.includeLocation) {
+            // Token gets replaced by replacePendingLocationToken() once the
+            // location service callback fires. If it never fires (timeout,
+            // permission denied), the token stays in the buffer as a marker
+            // — easy to grep for.
+            this.pendingLocationToken = "<<latlng-" + Date.now() + ">>"
+            lines.push("  :LATLNG: " + this.pendingLocationToken)
+        }
+        lines.push("  :END:")
+        lines.push("")  // blank line, free text follows
+        return lines.join("\n")
     }
 
-    public getCurrentEntry(): JournalEntry | null {
-        return this.currentEntry
+    /**
+     * Org-mode inactive timestamp: [YYYY-MM-DD Day HH:MM TZ]
+     * Example: [2026-04-26 Sun 14:32 +0900]
+     */
+    private formatOrgTimestamp(ms: number, tz: string): string {
+        const d = new Date(ms)
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        const pad = (n: number) => (n < 10 ? "0" + n : "" + n)
+        const date = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+        const day = dayNames[d.getDay()]
+        const time = pad(d.getHours()) + ":" + pad(d.getMinutes())
+        const tzPart = tz ? " " + tz : ""
+        return "[" + date + " " + day + " " + time + tzPart + "]"
     }
 
-    private openEntry(entry: JournalEntry): void {
-        this.currentEntry = entry
-        this.dirty = false
-        if (this.editor) this.editor.setContent(entry.content)
-        this.onEntryChangedEvent.invoke(entry)
+    /**
+     * Returns the configured `timezone` if set, otherwise the device's UTC
+     * offset in `+HHMM` / `-HHMM` form derived from `Date.getTimezoneOffset()`.
+     */
+    private effectiveTimezone(): string {
+        if (this.timezone && this.timezone.length > 0) return this.timezone
+        const offsetMin = -new Date().getTimezoneOffset()  // east-of-UTC, positive
+        const sign = offsetMin >= 0 ? "+" : "-"
+        const abs = Math.abs(offsetMin)
+        const hh = Math.floor(abs / 60)
+        const mm = abs % 60
+        const pad = (n: number) => (n < 10 ? "0" + n : "" + n)
+        return sign + pad(hh) + pad(mm)
+    }
+
+    /**
+     * Kicks off an async location lookup and a parallel timeout. Whichever
+     * fires first wins; the loser is a no-op. On success, replaces the
+     * heading's <<latlng-...>> token with the real coords.
+     */
+    private startLocationFetch(): void {
+        const token = this.pendingLocationToken
+        if (!token) return
+
+        let resolved = false
+        const finish = (replacement: string) => {
+            if (resolved) return
+            resolved = true
+            this.replacePendingLocationToken(token, replacement)
+            this.pendingLocationToken = null
+        }
+
+        const timeout = this.createEvent("DelayedCallbackEvent")
+        timeout.bind(() => finish("unavailable"))
+        timeout.reset(Math.max(0.5, this.locationTimeoutSec))
+
+        try {
+            if (!this.locationService) {
+                this.locationService = GeoLocation.createLocationService()
+            }
+            this.locationService.getCurrentPosition(
+                (pos: GeoPosition) => {
+                    const latlng = pos.latitude.toFixed(6) + "," + pos.longitude.toFixed(6)
+                    finish(latlng)
+                },
+                (err: string) => {
+                    print("JournalController: location error: " + err)
+                    finish("unavailable")
+                }
+            )
+        } catch (e) {
+            print("JournalController: location service unavailable: " + e)
+            finish("unavailable")
+        }
+    }
+
+    private replacePendingLocationToken(token: string, replacement: string): void {
+        const idx = this.buffer.lastIndexOf(token)
+        if (idx < 0) return
+        this.buffer = this.buffer.slice(0, idx) + replacement + this.buffer.slice(idx + token.length)
+        if (this.editor) this.editor.setContent(this.buffer)
+        this.markDirty()
     }
 
     private markDirty(): void {
@@ -162,16 +301,8 @@ export class JournalController extends BaseScriptComponent {
     }
 
     private flushNow(): void {
-        if (!this.dirty || !this.currentEntry) return
-        this.currentEntry.updatedAt = Date.now()
-        this.store.save(this.currentEntry)
+        if (!this.dirty) return
+        this.store.save(this.buffer)
         this.dirty = false
-    }
-
-    private formatTimestamp(ms: number): string {
-        const d = new Date(ms)
-        const pad = (n: number) => (n < 10 ? "0" + n : "" + n)
-        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
-            + " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
     }
 }

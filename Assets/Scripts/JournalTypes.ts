@@ -1,19 +1,25 @@
 // Copyright (c) 2026 IoTone, Inc. All rights reserved.
 // Licensed under the MIT License. See LICENSE.md in the project root.
 
-export interface JournalEntry {
-    id: string
-    createdAt: number
-    updatedAt: number
-    title: string
-    content: string
-}
+/**
+ * v1 SkywriterBLE persistence is a single continuous buffer of org-mode
+ * formatted text. Each lens session inserts a new org heading with a
+ * timestamp and properties drawer; user-typed content follows the heading
+ * as free text. The buffer accumulates across sessions.
+ *
+ * v2 will split this into multiple named/timestamped entries with cloud
+ * sync (Supabase) and org-mode export. The org-formatted v1 buffer is
+ * forward-compatible — splitting on ^\\*  headings recovers individual
+ * entries when v2 ships.
+ */
 
 export interface JournalStore {
-    list(): JournalEntry[]
-    load(id: string): JournalEntry | null
-    save(entry: JournalEntry): void
-    remove(id: string): void
-    getCurrentId(): string | null
-    setCurrentId(id: string): void
+    /** Load the current buffer text. Returns "" when no buffer has been saved. */
+    load(): string
+
+    /** Persist the buffer text. Overwrites any prior value. */
+    save(text: string): void
+
+    /** Delete the persisted buffer entirely. */
+    clear(): void
 }

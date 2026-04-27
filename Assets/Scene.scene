@@ -553,6 +553,11 @@
   ScriptAsset: !<reference> 6e897278-9865-41ee-8910-8b69e5c75d94
   ScriptInputsDefault:
     autosaveDelay: true
+    sessionHeading: true
+    sessionTags: true
+    timezone: true
+    includeLocation: true
+    locationTimeoutSec: true
   ScriptTypesDefault:
     {}
   ScriptInputs:
@@ -560,6 +565,12 @@
       bleKeyboard: !<MappingBased.AssignableType> e3de496e-6128-4254-bcf2-56c8b53713e7
       editor: !<MappingBased.AssignableType_1> 14ec3410-336f-4b34-997d-44b20e4af9f0
       autosaveDelay: 1.500000
+      sessionHeading: Session
+      sessionTags: skywriterble
+      timezone: ""
+      includeLocation: false
+      locationTimeoutSec: !<float> 3.000000
+      clearButton: !<MappingBased.AssignableType_2> 97610697-c776-4177-9aa8-d88674d834a0
   ScriptTypes:
     "":
       {}
@@ -797,8 +808,12 @@
   ScriptInputsDefault:
     scrollView: true
     scrollContentTransform: true
-    lineHeight: true
     maxLineWidth: true
+    cursorChar: true
+    cursorOffChar: true
+    cursorBlinkInterval: true
+    emptyHint: true
+    debugGrid: true
     debugGridWidth: true
   ScriptTypesDefault:
     {}
@@ -808,9 +823,14 @@
       scrollWindow: !<MappingBased.AssignableType> decf6936-c66b-48a2-9793-d7d39c400c64
       scrollView: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
       scrollContentTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
-      lineHeight: 1.500000
+      lineHeight: !<float> 3.000000
       maxLineWidth: !<float> 45.000000
-      debugGrid: true
+      cursorChar: █
+      cursorOffChar: ▒
+      cursorBlinkInterval: 0.500000
+      emptyHint: |2-
+         ← start typing
+      debugGrid: false
       debugGridWidth: !<float> 50.000000
       debugGridRows: !<float> 50.000000
   ScriptTypes:
@@ -1960,6 +1980,25 @@
   ScriptTypes:
     "":
       {}
+- !<Image/37bab7d2-ae06-495c-aef9-a73bfd1b647c>
+  PrefabRemaps:
+    []
+  Name: Image
+  Enabled: true
+  RenderOrder: 0
+  StretchMode: Fit
+  VerticalAlignment: Center
+  HorizontalAlignment: Center
+  MeshShadowMode: None
+  ShadowColor: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}
+  ShadowDensity: 1.000000
+  Materials:
+    - !<reference> 92f24c99-b9b5-4204-a1bb-2e6a0c2a2971
+  FlipX: false
+  FlipY: false
+  RotationAngle: 0
+  Pivot: {x: 0.000000, y: 0.000000}
+  ExtentsTarget: !<reference> 00000000-0000-0000-0000-000000000000
 - !<ScreenTransform/380e8405-a9d1-4ac4-80c0-ce7a0ac59921>
   PrefabRemaps:
     []
@@ -3466,6 +3505,21 @@
     []
   Components:
     - !<own> de25dd62-917e-411e-a54a-5de27367f0f3
+- !<SceneObject/5e635944-070a-4451-85eb-3042ed3a1b70>
+  PrefabRemaps:
+    []
+  Name: Trashcan
+  Enabled: true
+  Layers: 1
+  LocalTransform: !<TransformEntity>
+    Position: {x: -15.500000, y: 0.000000, z: 0.000000}
+    Rotation: {x: 0.000000, y: 0.000000, z: 0.000000}
+    Scale: {x: 1.250000, y: 1.250000, z: 1.250000}
+    HasSegmentScaleCompensation: false
+  Children:
+    - !<own> c85b4001-ef7a-41a3-af73-521774a6fb5c
+  Components:
+    - !<own> 97610697-c776-4177-9aa8-d88674d834a0
 - !<SceneObject/5efd0db2-fdf6-46a4-945e-87daa7dc4390>
   PrefabRemaps:
     []
@@ -6324,6 +6378,7 @@
     - !<own> b608a6bd-dc49-44c9-b636-c930286c0d3e
     - !<own> 9b3f8ea1-636b-41c2-8cb2-1891e5ebdbd3
     - !<own> ea77a1b5-f5d0-4819-9c3e-c14caad5bf64
+    - !<own> 5e635944-070a-4451-85eb-3042ed3a1b70
   Components:
     - !<own> 808317bb-b09c-45ab-bad2-43516e7e6781
     - !<own> 1b288567-8482-40e0-acdf-c056f145554f
@@ -6417,6 +6472,52 @@
     - !<own> 64368837-a132-4796-a0c9-d70f4760bbaf
   Components:
     []
+- !<ScriptComponent/97610697-c776-4177-9aa8-d88674d834a0>
+  PrefabRemaps:
+    []
+  Name: SphereButton
+  Enabled: true
+  ScriptAsset: !<reference> b050aedd-1d5f-4a83-886d-78be539ff667
+  ScriptInputsDefault:
+    _renderOrder: true
+    _inactive: true
+    _playAudio: true
+    _hasShadow: true
+    _shadowPositionOffset: true
+    _toggleable: true
+    _defaultToOn: true
+    addCallbacks: true
+    triggerUpCallbacks: true
+    triggerDownCallbacks: true
+    onValueChangeCallbacks: true
+    onFinishedCallbacks: true
+    _radius: true
+    _zBackScale: true
+  ScriptTypesDefault:
+    {}
+  ScriptInputs:
+    "":
+      _renderOrder: 0
+      _inactive: false
+      _playAudio: false
+      _hasShadow: false
+      _shadowPositionOffset: !<Vec3> {x: 0.000000, y: 0.000000, z: 0.000000}
+      _toggleable: false
+      _defaultToOn: false
+      addCallbacks: false
+      triggerUpCallbacks:
+        []
+      triggerDownCallbacks:
+        []
+      onValueChangeCallbacks:
+        []
+      onFinishedCallbacks:
+        []
+      _radius: !<float> 1.000000
+      _zBackScale: !<float> 1.000000
+  ScriptTypes:
+    "":
+      {}
 - !<SceneObject/97dafb6f-33b5-4ba0-a059-f0d17fab42c6>
   PrefabRemaps:
     []
@@ -8427,6 +8528,21 @@
     CapitalizationOverride: None
   DepthTest: false
   TwoSided: false
+- !<SceneObject/c85b4001-ef7a-41a3-af73-521774a6fb5c>
+  PrefabRemaps:
+    []
+  Name: TrashcanIcon
+  Enabled: true
+  Layers: 1
+  LocalTransform: !<TransformEntity>
+    Position: {x: 0.000000, y: 0.000000, z: 0.000000}
+    Rotation: {x: 0.000000, y: 0.000000, z: 0.000000}
+    Scale: {x: 1.000000, y: 1.000000, z: 1.000000}
+    HasSegmentScaleCompensation: false
+  Children:
+    []
+  Components:
+    - !<own> 37bab7d2-ae06-495c-aef9-a73bfd1b647c
 - !<SceneObject/c8b01dce-60aa-4417-9698-17b0655f2e14>
   PrefabRemaps:
     []
