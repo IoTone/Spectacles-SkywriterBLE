@@ -183,11 +183,24 @@ A full text editor experience in AR using SIK's ContainerFrame and ScrollView. T
 
 ### Scene Hierarchy
 
+Design-time:
+
 ```
 TextEditorFrame                    [ContainerFrame component]
-  └─ ScrollViewObj                 [ScrollView component + ScreenTransform]
-      └─ ScrollContent             [ScreenTransform — single child of ScrollView]
-          └─ EditorText            [Text component + ScreenTransform]
+  └─ ScrollViewObj                 [ScrollView component + ScreenTransform, Bounds ≈ ±innerSize/2]
+      └─ ScrollContent             [ScreenTransform Bounds ±1 — single child of ScrollView]
+          └─ EditorText            [Text component + ScreenTransform Bounds ±1]
+```
+
+Runtime (after ContainerFrame's `onAwake` re-parents children — see "ContainerFrame Layout Gotcha" below):
+
+```
+TextEditorFrame                    [ContainerFrame component]
+  ├─ frame                         (auto-created visual frame prefab, with close/follow buttons)
+  └─ ContainerInner                (auto-created at runtime; regular Transform, scale 1)
+      └─ ScrollViewObj             [your design-time children land here]
+          └─ ScrollContent
+              └─ EditorText
 ```
 
 **ContainerFrame** provides:
@@ -218,14 +231,15 @@ TextEditorFrame                    [ContainerFrame component]
 
 | Property | Recommended Value |
 |---|---|
-| `innerSize` | `{30, 25}` |
+| `innerSize` | `{32, 32}` |
 | `border` | `4` |
 | `autoShowHide` | `false` |
 | `allowScaling` | `true` |
 | `allowTranslation` | `true` |
 | `useBillboarding` | `true` |
-| `isContentInteractable` | `true` |
+| `isContentInteractable` | `true` (required — ScrollView drag input goes through ContainerFrame) |
 | `showCloseButton` | `true` |
+| `cutOut` | `true` |
 
 ### ScrollView Configuration
 
@@ -243,8 +257,30 @@ TextEditorFrame                    [ContainerFrame component]
 |---|---|
 | Font size | `36`-`48` |
 | Horizontal alignment | Left |
+| Vertical alignment | Top |
 | Vertical overflow | Overflow |
+| Horizontal overflow | Wrap |
 | Color | White |
+| Depth Test | off (so Text renders on top of the ContainerFrame backdrop regardless of Z) |
+| Layout Rect | tuned so width matches the wrap target — for `innerSize: {32, 32}` with `border: 4`, around `-14, 14, -14, 14` |
+
+### Frame Layout Gotcha — coordinate system
+
+**Applies to both SIK `ContainerFrame` and SpectaclesUIKit `Frame`.** The coordinate system is non-obvious and silently breaks ScreenTransform-based children (like ScrollView / ScrollWindow) if children are sized with the usual `Bounds = -1, 1, -1, 1` "fill parent" idiom. The cause is two layers of indirection that aren't visible in the Inspector:
+
+1. **Runtime SceneObject re-parenting.** On `onAwake`, the frame creates a child SceneObject (named `ContainerInner` in SIK, `content` in UIKit) and moves all the frame's existing children into it. The new content SceneObject has a regular `Transform` — *not* a `ScreenTransform`.
+
+2. **The visible panel size is decoupled from the inner Transform's scale.** The frame draws its visible panel at `innerSize` (e.g., 32×32) by writing shader uniforms / a separate render mesh. It does **not** scale the content SceneObject. The content's local scale stays at `(1, 1, 1)`. `Auto Scale Content` only matters when `innerSize` later changes from its initial value (e.g., user drags to resize); at startup, `factor = innerSize / originalInnerSize = 1` so the scale call is a no-op.
+
+Therefore, a child of ContainerFrame with `Bounds = -1, 1, -1, 1` fills **2×2 world units**, not the visible 32×32 panel area — about 1/16th the size. SIK ScrollView's `MaskingComponent` then clips content to that tiny region, producing the symptom of "the entire editor renders as a single character."
+
+**Sizing rule:** for ScreenTransform children of a ContainerFrame/Frame, set `Bounds` to approximately `±innerSize/2`, then tighten for the frame border. With `innerSize: {32, 32}` and `border: 4`, start with `Bounds = -14, 14, -14, 14` (or `-12, 12, -12, 12`) and tune visually.
+
+**Same gotcha applies to UIKit ScrollWindow's internal Scroller.** ScrollWindow re-parents its own children into an internal `Scroller` SceneObject (Transform-only, never scaled to `scrollDimensions`). So the `Text` rendered inside ScrollWindow needs its ScreenTransform `Bounds` set to absolute world units (e.g., `±16` to match `windowSize: 32`), *not* `±1`. ScrollWindow auto-sets *its own* ScreenTransform to `±windowSize/2`, but does not propagate that sizing into the Scroller. The general principle: **any ScreenTransform child of a Transform-only ancestor must use absolute Bounds, not `±1` "fill parent" semantics**, because there's no parent ScreenTransform for `±1` to normalize against.
+
+**Z-position note:** ContainerInner is positioned at `z = scaleZ + 0.5` (= 1.5) forward of the frame mesh, so children render in front of the frame's backdrop. But the frame's translucent material can still darken Text drawn in screen-space at the same Z. Two mitigations:
+- On the `Text` component, **disable Depth Test** so Text renders on top regardless of depth-buffer state.
+- If still darkened, push the Text's local Z forward (`+1` to `+5` units) on the SceneObject's underlying Transform (Advanced tab of ScreenTransform).
 
 ---
 

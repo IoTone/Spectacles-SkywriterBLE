@@ -26,12 +26,15 @@
   ExportUid: 00000000-0000-0000-0000-000000000000
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
-    bleKeyboard: false
+    debugGrid: false
+    debugGridRows: false
+    debugGridWidth: false
     editorText: false
     lineHeight: false
     maxLineWidth: false
     scrollContentTransform: false
     scrollView: false
+    scrollWindow: false
   ScriptTypesHidden:
     {}
   ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
@@ -41,19 +44,25 @@
   Attachments:
     []
   DefaultScriptInputs:
-    - bleKeyboard: !<MappingBased.AssignableType> 00000000-0000-0000-0000-000000000000
-      editorText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+    - editorText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      scrollWindow: !<MappingBased.AssignableType> 00000000-0000-0000-0000-000000000000
       scrollView: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
       scrollContentTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
       lineHeight: 1.500000
       maxLineWidth: !<float> 45.000000
+      debugGrid: false
+      debugGridWidth: !<float> 50.000000
+      debugGridRows: !<float> 40.000000
   ScriptTypes:
     -
       {}
   InputLines:
-    - // @input AssignableType bleKeyboard
     - '// @input Component.Text editorText {"hint":"The Text component that displays typed content"}'
-    - '// @input AssignableType_1 scrollView {"hint":"The ScrollView component for scrolling"}'
-    - "// @input Component.ScreenTransform scrollContentTransform {\"hint\":\"ScreenTransform of the scroll content wrapper (ScrollView's child)\"}"
-    - '// @input float lineHeight = 1.5 {"hint":"Line height in local units for scroll calculation"}'
+    - '// @input AssignableType scrollWindow {"hint":"UIKit ScrollWindow component (preferred). Wire this OR the SIK pair below."}'
+    - '// @input AssignableType_1 scrollView {"hint":"LEGACY: SIK ScrollView component. Used only if scrollWindow is not wired."}'
+    - '// @input Component.ScreenTransform scrollContentTransform {"hint":"LEGACY: ScreenTransform of the SIK scroll content wrapper. Used only with scrollView."}'
+    - '// @input float lineHeight = 1.5 {"hint":"Line height in local units for scroll calculation (SIK path only)"}'
     - '// @input float maxLineWidth = 45 {"hint":"Max characters per line before wrapping"}'
+    - '// @input bool debugGrid {"hint":"DEBUG: fill the editor with a checker grid so layout can be inspected in Preview without BLE. Ignores setContent() while on."}'
+    - '// @input float debugGridWidth = 50 {"hint":"DEBUG: characters per row in the grid"}'
+    - '// @input float debugGridRows = 40 {"hint":"DEBUG: number of rows in the grid"}'
